@@ -37,6 +37,14 @@ import {
 const STORAGE_KEY_SELECTED_IDS = 'bvshop_selected_ids';
 const LEGACY_STORAGE_KEY_ORDERS = 'bvshop_print_checked_orders';
 const STORAGE_KEY_SETTINGS = 'bvshop_print_settings';
+const STORAGE_KEY_PRINT_REQUEST = 'bvshop_print_request';
+const DEBUG_DEFAULT_SF_ORDER_ID = '10541';
+
+interface ProbeSfLabelResponse {
+  ok?: boolean;
+  error?: string;
+  data?: unknown;
+}
 
 const DEFAULT_SETTINGS: PrintSettings = {
   senderName: '',
@@ -53,6 +61,8 @@ export function PopupApp() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<{ text: string; type: 'info' | 'warning' | 'error' | 'success' } | null>(null);
+  const [probeOrderIdInput, setProbeOrderIdInput] = useState(DEBUG_DEFAULT_SF_ORDER_ID);
+  const [probeResultJson, setProbeResultJson] = useState('');
 
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -75,6 +85,10 @@ export function PopupApp() {
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
+
+  useEffect(() => {
+    setProbeOrderIdInput(getDefaultProbeOrderId());
+  }, [orders, sortedIds]);
 
   async function loadInitialState() {
     setLoading(true);
@@ -259,8 +273,63 @@ export function PopupApp() {
       settings,
     };
 
-    await chrome.runtime.sendMessage({ type: 'OPEN_PRINT_VIEW', ...request });
+    // 寫入 storage 作為列印頁單一真實來源（即使 popup 關閉，print page 仍可讀到）。
+    await chrome.storage.local.set({ [STORAGE_KEY_PRINT_REQUEST]: request });
+
+    // MV3 popup 會在新分頁變成 active 後立即關閉；此處使用 fire-and-forget 避免等待回應造成中斷。
+    void chrome.runtime.sendMessage({ ...request, type: 'OPEN_PRINT_VIEW' }).catch((error) => {
+      console.warn('[BVSHOP Print] OPEN_PRINT_VIEW failed, using popup fallback:', error);
+      // 保底：若 background 訊息流程失敗，改由 popup 直接開列印頁，確保按下後一定能開分頁。
+      void openPrintViewFallback();
+    });
+
     setNotice({ text: '✅ 已開啟列印視圖，請在新分頁確認後列印。', type: 'success' });
+  }
+
+  async function openPrintViewFallback() {
+    const printUrl = chrome.runtime.getURL('print/index.html');
+    await chrome.tabs.create({ url: printUrl, active: true });
+  }
+
+  function getDefaultProbeOrderId(): string {
+    const firstSf = sortedIds
+      .map((id) => orders.find((order) => String(order.orderId) === id))
+      .find((order): order is PrintOrderData => order != null && planLabel(order).capability === 'sf_native');
+    return firstSf ? String(firstSf.orderId) : DEBUG_DEFAULT_SF_ORDER_ID;
+  }
+
+  async function handleProbeSfLabelDebug() {
+    const tab = await findBvshopTab();
+    if (tab?.id == null) {
+      setNotice({ text: '請先開啟並登入 BVSHOP /order 分頁。', type: 'warning' });
+      return;
+    }
+
+    const fallbackOrderId = getDefaultProbeOrderId();
+    const orderId = (probeOrderIdInput.trim() || fallbackOrderId);
+
+    try {
+      const rawResponse = await chrome.tabs.sendMessage(tab.id, { type: 'PROBE_SF_LABEL', orderId });
+      const response = isProbeSfLabelResponse(rawResponse) ? rawResponse : undefined;
+
+      if (!response || response.ok === false) {
+        setNotice({
+          text: `❌ 順豐探測失敗：${response?.error ?? '沒有收到回應'}。請重新整理 BVSHOP 分頁後再試。`,
+          type: 'error',
+        });
+        return;
+      }
+
+      const resultJson = JSON.stringify(response.data ?? response, null, 2);
+      setProbeResultJson(resultJson);
+      console.log('[BVSHOP Print][DEBUG] PROBE_SF_LABEL result:', response.data ?? response);
+      setNotice({ text: '✅ 已完成順豐探測（debug），結果已顯示於下方。', type: 'success' });
+    } catch (error) {
+      setNotice({
+        text: `❌ 無法觸發順豐探測：${String(error)}。請重新整理 BVSHOP 分頁後再試。`,
+        type: 'error',
+      });
+    }
   }
 
   async function handleClear() {
@@ -489,6 +558,28 @@ export function PopupApp() {
           ℹ️ 物流單（黑貓/順豐/綠界/PayUni）仍為 TODO；MVP 目前只列印熱感出貨明細，不會自動建立物流單。
         </div>
 
+        {/* ⚠️ DEBUG / 調查用途：一鍵觸發 content script 的 PROBE_SF_LABEL，不影響正式列印流程 */}
+        <div className="debug-probe">
+          <div className="debug-title">DEBUG：順豐物流單探測</div>
+          <div className="debug-actions">
+            <input
+              type="text"
+              value={probeOrderIdInput}
+              placeholder={getDefaultProbeOrderId()}
+              onChange={(e) => setProbeOrderIdInput(e.target.value)}
+            />
+            <button
+              className="btn btn-secondary btn-debug"
+              onClick={handleProbeSfLabelDebug}
+            >
+              🔬 順豐物流單探測（debug）
+            </button>
+          </div>
+          {probeResultJson && (
+            <pre className="debug-result">{probeResultJson}</pre>
+          )}
+        </div>
+
         <div className="action-bar">
           <button
             className="btn btn-primary"
@@ -517,4 +608,14 @@ function normalizeIds(value: unknown): string[] {
         .filter(Boolean)
     )
   );
+}
+
+function isProbeSfLabelResponse(value: unknown): value is ProbeSfLabelResponse {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  const hasOk = !('ok' in candidate) || typeof candidate.ok === 'boolean';
+  const hasError = !('error' in candidate) || typeof candidate.error === 'string';
+  const hasData = !('data' in candidate) || candidate.data !== undefined;
+  const hasAnyExpectedKey = ('ok' in candidate) || ('error' in candidate) || ('data' in candidate);
+  return hasAnyExpectedKey && hasOk && hasError && hasData;
 }

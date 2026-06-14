@@ -2,12 +2,13 @@
  * PrintPage component — renders thermal slips in a printable view
  */
 import { useState, useEffect } from 'react';
-import type { PrintRequestMessage, PrintOrder } from '../types/index.js';
-import { renderThermalSlipHtml, THERMAL_SLIP_CSS } from '../templates/thermal.js';
-import { arrangePrintPairs } from '../core/sort.js';
+import type { PrintRequestMessage } from '../types/index.js';
+import { renderThermalSlipHtml, renderLabelPlaceholderHtml, THERMAL_SLIP_CSS } from '../templates/thermal.js';
+import { arrangePrintPages } from '../core/sort.js';
+import type { PrintPage as ArrangedPrintPage } from '../core/sort.js';
 
 export function PrintPage() {
-  const [orders, setOrders] = useState<PrintOrder[]>([]);
+  const [pages, setPages] = useState<ArrangedPrintPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,8 +26,8 @@ export function PrintPage() {
   }, []);
 
   function applyRequest(request: PrintRequestMessage) {
-    const arranged = arrangePrintPairs(request.orders, request.settings.mode);
-    setOrders(arranged);
+    const arranged = arrangePrintPages(request.orders, request.settings.mode);
+    setPages(arranged);
     setLoading(false);
   }
 
@@ -80,10 +81,14 @@ export function PrintPage() {
       <div className="print-preview">
         {/* Inject slip CSS */}
         <style>{THERMAL_SLIP_CSS}</style>
-        {orders.map((order) => (
+        {pages.map((page, index) => (
           <div
-            key={order.orderId}
-            dangerouslySetInnerHTML={{ __html: renderThermalSlipHtml(order) }}
+            key={`${page.kind}-${page.order.orderId}-${index}`}
+            dangerouslySetInnerHTML={{
+              __html: page.kind === 'label'
+                ? renderLabelPlaceholderHtml(page.order)
+                : renderThermalSlipHtml(page.order),
+            }}
           />
         ))}
       </div>
