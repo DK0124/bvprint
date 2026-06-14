@@ -43,15 +43,19 @@ export async function mergePdfs(pdfList: Uint8Array[]): Promise<Uint8Array> {
 }
 
 export function decodeTcatPdf(input: string): Uint8Array {
-  const compact = input.trim();
-  const looksBase64 = /^[A-Za-z0-9+/=\r\n]+$/.test(compact) && compact.length % 4 === 0;
+  const compact = input.trim().replace(/\s+/g, '');
+  const looksBase64 = /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length % 4 === 0;
   if (looksBase64) {
     try {
       return Uint8Array.from(Buffer.from(compact, 'base64'));
     } catch {
-      // TODO: confirm tcat raw format if base64 decode fails in production payloads.
+      // If base64 parsing fails, fall back to raw bytes for MVP compatibility with unknown tcat payload variants.
+      // TODO: confirm the exact non-base64 tcat payload format and decide whether production should reject instead.
     }
   }
-  // TODO: confirm raw string format from tcat if not base64 encoded.
-  return Uint8Array.from(Buffer.from(input));
+  const rawBytes = Uint8Array.from(Buffer.from(input));
+  if (rawBytes.length === 0) {
+    throw new Error('TCAT PDF payload is empty');
+  }
+  return rawBytes;
 }

@@ -24,6 +24,7 @@ app.get('/healthz', (_req, res) => {
 app.use('/api', createOrdersRouter(client));
 app.use('/api', createPrintJobsRouter(client));
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : 'Unexpected error';
   res.status(500).json({ message });

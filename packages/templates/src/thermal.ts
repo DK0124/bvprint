@@ -1,5 +1,4 @@
-import type { BvOrderDetail } from '@bvprint/bvshop-api';
-import { PAYMENT_STATUS_LABELS, type PaymentStatus } from '@bvprint/bvshop-api';
+import type { BvOrderDetail, PaymentStatus } from '@bvprint/bvshop-api';
 
 export type PaperSize = 'THERMAL_100X150' | 'A4' | 'A5' | 'ROLL_80MM';
 
@@ -15,6 +14,13 @@ const THERMAL_CSS = `
   .label { font-weight: 700; }
   .remark { min-height: 30px; border: 1px solid #ddd; padding: 4px; }
 `;
+
+const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  1: '未付款',
+  2: '已付款',
+  [-1]: '已退款',
+  [-4]: '已逾期',
+};
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')

@@ -13,11 +13,11 @@
     "@bvprint/bvshop-api": "0.1.0",
     "@bvprint/print-core": "0.1.0",
     "@bvprint/templates": "0.1.0",
-    "axios": "^1.10.0",
+    "axios": "^1.16.0",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "pdf-lib": "^1.17.1",
-    "playwright": "^1.53.1",
+    "playwright": "^1.55.1",
     "zod": "^3.25.67"
   },
   "devDependencies": {

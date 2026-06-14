@@ -10,12 +10,6 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "baseUrl": ".",
-    "paths": {
-      "@bvprint/bvshop-api": ["packages/bvshop-api/src/index.ts"],
-      "@bvprint/print-core": ["packages/print-core/src/index.ts"],
-      "@bvprint/templates": ["packages/templates/src/index.ts"]
-    }
+    "sourceMap": true
   }
 }
