@@ -1,0 +1,255 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-size: 13px;
+  background: #fff;
+  color: #222;
+  width: 520px;
+  min-height: 200px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.popup-header {
+  background: #2962ff;
+  color: #fff;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.popup-body {
+  padding: 12px 14px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: #757575;
+}
+
+.empty-state p {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #555;
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+
+.section-title:first-child {
+  margin-top: 0;
+}
+
+/* ── Order List Table ── */
+.order-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+thead th {
+  background: #f5f5f5;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 700;
+  border-bottom: 1px solid #ddd;
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid #eee;
+  cursor: grab;
+  transition: background 0.15s;
+}
+
+tbody tr:last-child {
+  border-bottom: none;
+}
+
+tbody tr:hover {
+  background: #e8f0fe;
+}
+
+tbody tr.dragging {
+  opacity: 0.4;
+  background: #c5cae9;
+}
+
+tbody tr.drag-over {
+  background: #bbdefb;
+  border-top: 2px solid #2962ff;
+}
+
+td {
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+.seq-cell {
+  font-weight: 700;
+  color: #1a237e;
+  font-size: 13px;
+  min-width: 60px;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: #bbb;
+  font-size: 16px;
+  padding-right: 4px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge-warning { background: #fff3cd; color: #856404; }
+.badge-success { background: #d4edda; color: #155724; }
+.badge-info    { background: #d1ecf1; color: #0c5460; }
+.badge-danger  { background: #f8d7da; color: #721c24; }
+.badge-muted   { background: #e2e3e5; color: #383d41; }
+
+/* ── Settings Form ── */
+.settings-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #444;
+}
+
+input[type="text"],
+select {
+  padding: 5px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+}
+
+input[type="text"]:focus,
+select:focus {
+  outline: none;
+  border-color: #2962ff;
+  box-shadow: 0 0 0 2px rgba(41,98,255,0.15);
+}
+
+/* ── Action Buttons ── */
+.action-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.btn {
+  flex: 1;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.btn-primary {
+  background: #2962ff;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #1a45c7;
+}
+
+.btn-primary:disabled {
+  background: #9ea7b3;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.btn-secondary:hover {
+  background: #e0e0e0;
+}
+
+.notice {
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.notice-info    { background: #e3f2fd; color: #0d47a1; }
+.notice-warning { background: #fff8e1; color: #e65100; }
+.notice-error   { background: #ffebee; color: #b71c1c; }
+.notice-success { background: #e8f5e9; color: #1b5e20; }
+
+.partial-badge {
+  font-size: 10px;
+  color: #f57c00;
+  margin-left: 3px;
+}
+
+.tracking-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: #b71c1c;
+  font-weight: 700;
+}
+
+.tracking-warning-list {
+  margin-top: 8px;
+}
