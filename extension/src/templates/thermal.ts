@@ -166,7 +166,7 @@ export function renderThermalSlipHtml(po: PrintOrder): string {
   </section>
   ${itemsHtml}
   ${remarkHtml}
-  <footer>總額：$${esc(order.totalText || Number(order.totalPrice).toLocaleString('en-US'))}</footer>
+  <footer>總額：$${esc(order.totalText || Number(order.totalPrice).toLocaleString())}</footer>
 </section>`;
 }
 

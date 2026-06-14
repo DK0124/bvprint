@@ -14,7 +14,7 @@ describe('fetchOrdersByIds', () => {
         response: {
           current_page: 1,
           data: [
-            { id: 1726850, order_form_code: 'A' },
+            { id: 1726850, order_form_code: '2605301537Q1M5QR' },
           ],
         },
       }),
@@ -31,7 +31,7 @@ describe('fetchOrdersByIds', () => {
     expect(url).toContain('limit=100');
     expect(init.credentials).toBe('include');
     expect(init.headers).toEqual({ Accept: 'application/json' });
-    expect(result).toEqual([{ id: 1726850, order_form_code: 'A' }]);
+    expect(result).toEqual([{ id: 1726850, order_form_code: '2605301537Q1M5QR' }]);
   });
 
   it('returns empty array on non-ok response', async () => {
