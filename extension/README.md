@@ -24,7 +24,7 @@ chrome.storage.local 暫存累積的 order IDs
     ↓
 點擊工具列 Extension 圖示 → Popup UI
     ↓
-Popup 用 /order/query?order_ids=... 重新抓回完整訂單資料
+Popup 透過 chrome.tabs.sendMessage 請 BVSHOP 分頁內的 content script 代打 /order/query?order_ids=...
     ↓
 拖曳排序 + 即時流水號預覽 (001 / 025)
     ↓
@@ -36,7 +36,7 @@ Popup 用 /order/query?order_ids=... 重新抓回完整訂單資料
 ### 安全設計
 
 - **零 Token**：原始碼與執行流程都不使用 ******
-- **同源 cookie**：所有 BVSHOP API 呼叫都使用 `fetch(..., { credentials: 'include' })`。
+- **同源 cookie**：BVSHOP API 由 content script 在 BVSHOP 頁面來源內呼叫，並使用 `fetch(..., { credentials: 'include' })`。
 - **最小範圍**：只打 `https://bvshop-manage.bvshop.tw/*`。
 - **不自動建物流單**：黑貓 / 順豐 / 綠界 / PayUni 物流單仍為 TODO。
 
@@ -61,12 +61,12 @@ Chrome 載入步驟：
 
 ## 使用流程（已校正）
 
-1. 登入 BVSHOP 後台，前往 `https://bvshop-manage.bvshop.tw/order`
+1. **先開啟並登入** BVSHOP 後台，前往 `https://bvshop-manage.bvshop.tw/order`
 2. 勾選訂單（可跨頁）
 3. **每換一頁勾選後，都點一次右下角「🖨 出貨列印助手」**，累積本頁勾選 ID
 4. 重複直到所有頁面都累積完成
 5. 點工具列擴充圖示開啟 popup
-6. popup 會自動讀取累積 ID，並用 `order/query?order_ids=...` 抓回完整資料
+6. popup 會自動讀取累積 ID，並委由該 BVSHOP 分頁內的 content script 用登入 cookie 呼叫 `order/query?order_ids=...` 抓回完整資料
 7. 可拖曳排序、即時預覽流水號、填寄件人資訊
 8. 點「🖨 產生列印」→ 新分頁列印 → 另存 PDF
 9. 需要重來時，點 popup 內「🗑 清除累積」
@@ -75,8 +75,14 @@ Chrome 載入步驟：
 
 如果你只在目前頁勾選、尚未按右下角累積按鈕就直接開 popup：
 
-- popup 會嘗試向 active tab 的 content script 讀取「目前頁勾選 ID」
+- popup 會嘗試向已開啟的 BVSHOP `/order` 分頁 content script 讀取「目前頁勾選 ID」
 - 這樣單頁勾選仍可直接列印
+
+### 疑難排解
+
+- popup 若顯示「請先開啟並登入 BVSHOP 後台分頁」，請先開啟 `https://bvshop-manage.bvshop.tw/order` 並確認已登入，再回 popup 重新抓取。
+- popup 若顯示「無法連線到 BVSHOP 分頁的內容腳本」，請重新整理該 BVSHOP 後台分頁後再回 popup 重新抓取。
+- 架構上 popup **不直接呼叫** BVSHOP API，而是委由 content script 代打，以確保相對路徑 `/order/query` 與登入 cookie 都在 BVSHOP 同源環境內正確運作，避免先前的 `Failed to fetch`。
 
 ### 為什麼需要「累積本頁勾選」？
 

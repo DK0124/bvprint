@@ -3,7 +3,7 @@
  *
  * 功能:
  * - 讀取 chrome.storage.local 累積的訂單 IDs
- * - 用 /order/query?order_ids=... 重新抓取真實完整資料
+ * - 委由 BVSHOP 分頁內的 content script 抓取真實完整訂單資料
  * - 若尚未累積資料，fallback 直接詢問目前頁 content script 的勾選 IDs（單頁模式）
  * - 拖曳排序 + 即時流水號
  * - 列印設定 (寄件人、紙張、排序模式)
@@ -21,13 +21,16 @@ import type {
 } from '../types/index.js';
 import { makePrintSeq } from '../core/sequence.js';
 import { detectProvider } from '../core/provider.js';
-import { fetchOrdersByIds } from '../bvshop/fetcher.js';
 import { normalizeOrder } from '../bvshop/normalize.js';
 import { buildPrintOrders } from '../print/renderer.js';
 import {
   getPaymentStatusLabel,
   getLogisticStatusLabel,
 } from '../bvshop/labels.js';
+import {
+  fetchOrdersViaContentScript,
+  findBvshopTab,
+} from './fetchViaContent.js';
 
 const STORAGE_KEY_SELECTED_IDS = 'bvshop_selected_ids';
 const LEGACY_STORAGE_KEY_ORDERS = 'bvshop_print_checked_orders';
@@ -118,11 +121,10 @@ export function PopupApp() {
 
   async function requestCurrentPageSelectedIds(): Promise<string[]> {
     try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tabId = tabs[0]?.id;
-      if (tabId == null) return [];
+      const tab = await findBvshopTab();
+      if (tab?.id == null) return [];
 
-      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_CURRENT_PAGE_SELECTED_IDS' }) as
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_CURRENT_PAGE_SELECTED_IDS' }) as
         | { orderIds?: unknown }
         | undefined;
 
@@ -159,7 +161,28 @@ export function PopupApp() {
 
     setRefreshing(true);
     try {
-      const rawOrders = await fetchOrdersByIds(nextIds);
+      const { data: rawOrders, error, noTab } = await fetchOrdersViaContentScript(nextIds);
+
+      if (noTab) {
+        setOrders([]);
+        setSortedIds([]);
+        setNotice({
+          text: '請先開啟並登入 BVSHOP 後台分頁(https://bvshop-manage.bvshop.tw/order),再回到這裡重新抓取。',
+          type: 'warning',
+        });
+        return;
+      }
+
+      if (error) {
+        setOrders([]);
+        setSortedIds([]);
+        setNotice({
+          text: error,
+          type: 'error',
+        });
+        return;
+      }
+
       const normalizedOrders = rawOrders.map(normalizeOrder);
       const ordersById = new Map(normalizedOrders.map((order) => [String(order.orderId), order]));
       const ordered = nextIds

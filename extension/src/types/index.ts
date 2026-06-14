@@ -130,6 +130,15 @@ export interface SelectedIdsUpdatedMessage {
   addedCount?: number;
 }
 
+export interface FetchOrdersRequestMessage {
+  type: 'FETCH_ORDERS';
+  orderIds: Array<string | number>;
+}
+
+export type FetchOrdersResponse =
+  | { ok: true; data: BvOrderRaw[] }
+  | { ok: false; error: string };
+
 export interface PrintRequestMessage {
   type: 'PRINT_REQUEST';
   orders: PrintOrder[];
