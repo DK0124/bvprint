@@ -107,6 +107,10 @@ export function PopupApp() {
       setOrders([]);
       setSelectedIds([]);
       setSortedIds([]);
+      setNotice({
+        text: '尚未找到累積訂單，也無法直接讀取目前頁勾選。請先到 BVSHOP /order 頁勾選後，點右下角按鈕累積本頁訂單。',
+        type: 'info',
+      });
     } finally {
       setLoading(false);
     }
@@ -304,10 +308,6 @@ export function PopupApp() {
         {notice && (
           <div className={`notice notice-${notice.type}`}>{notice.text}</div>
         )}
-
-        <div className="notice notice-info">
-          操作流程：每頁勾選後點一次右下角「🖨 出貨列印助手」累積本頁訂單；全部勾完後開啟 popup，自動用 order_ids 重新抓取完整資料。
-        </div>
 
         {orders.length === 0 ? (
           <div className="empty-state">

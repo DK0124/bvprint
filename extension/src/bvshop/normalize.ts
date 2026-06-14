@@ -61,7 +61,7 @@ function buildAddress(raw: BvOrderRaw): string {
 }
 
 function formatPrice(price: number): string {
-  return Number(price || 0).toLocaleString();
+  return (price || 0).toLocaleString();
 }
 
 function normalizeNullableText(value: unknown): string | null {
