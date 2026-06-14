@@ -6,6 +6,7 @@ import type { BvOrderRaw } from '../types/index.js';
  * 已依真實後台校正：
  * - 主力資料來源：/order/query?order_ids=...&limit=...
  * - 同網域、零 Token，完全依賴登入 cookie
+ * - 必須在 content script（BVSHOP 頁面來源）內呼叫，不可由 popup/background 直接呼叫
  */
 export const ENDPOINTS = {
   ORDER_QUERY: '/order/query',

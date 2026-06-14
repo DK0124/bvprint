@@ -12,6 +12,7 @@
 
 import { scrapeCheckedOrderIds } from '../bvshop/scraper.js';
 import type { SelectedIdsUpdatedMessage } from '../types/index.js';
+import { handleContentMessage } from './messages.js';
 
 const BUTTON_ID = 'bvshop-print-assistant-btn';
 const STORAGE_KEY_SELECTED_IDS = 'bvshop_selected_ids';
@@ -142,11 +143,7 @@ function showNotice(text: string, type: 'success' | 'warning' | 'error'): void {
 
 function registerMessageHandler(): void {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === 'GET_CURRENT_PAGE_SELECTED_IDS') {
-      sendResponse({ orderIds: scrapeCheckedOrderIds(document) });
-      return true;
-    }
-    return undefined;
+    return handleContentMessage(message, document, sendResponse);
   });
 }
 
