@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { arrangePrintPages, arrangePrintPairs } from '../src/core/sort.js';
 import type { PrintOrder } from '../src/types/index.js';
 
-function makePrintOrder(id: number, index: number, total: number): PrintOrder {
+function makePrintOrder(
+  id: number,
+  index: number,
+  total: number,
+  capability: PrintOrder['labelPlan']['capability'] = 'none'
+): PrintOrder {
   return {
     orderId: id,
     orderCode: `CODE${id}`,
@@ -31,6 +36,13 @@ function makePrintOrder(id: number, index: number, total: number): PrintOrder {
       trackingCode: null,
     },
     provider: 'tcat',
+    labelPlan: {
+      capability,
+      displayText: capability === 'sf_native' ? '順豐 10×15' : '無物流單',
+      bvshopViewUrl: capability === 'sf_native'
+        ? `https://bvshop-manage.bv-shop.tw/order_multi_print_sf_logistics?ids=${id}`
+        : undefined,
+    },
   };
 }
 
@@ -40,38 +52,48 @@ const orders = [
   makePrintOrder(3, 2, 3),
 ];
 
+const mixedOrders = [
+  makePrintOrder(1, 0, 3, 'sf_native'),
+  makePrintOrder(2, 1, 3, 'none'),
+  makePrintOrder(3, 2, 3, 'sf_native'),
+];
+
 describe('arrangePrintPages', () => {
-  it('PAIR mode interleaves label then slip', () => {
+  it('PAIR mode interleaves label then slip, skipping label for none', () => {
+    const pages = arrangePrintPages(mixedOrders, 'PAIR');
+    expect(pages.length).toBe(5);
+    expect(pages[0]).toMatchObject({ kind: 'label', order: mixedOrders[0] });
+    expect(pages[1]).toMatchObject({ kind: 'slip', order: mixedOrders[0] });
+    expect(pages[2]).toMatchObject({ kind: 'slip', order: mixedOrders[1] });
+    expect(pages[3]).toMatchObject({ kind: 'label', order: mixedOrders[2] });
+    expect(pages[4]).toMatchObject({ kind: 'slip', order: mixedOrders[2] });
+  });
+
+  it('LABELS_FIRST mode: labels with capability first, then all slips', () => {
+    const pages = arrangePrintPages(mixedOrders, 'LABELS_FIRST');
+    expect(pages.length).toBe(5);
+    expect(pages[0]).toMatchObject({ kind: 'label', order: mixedOrders[0] });
+    expect(pages[1]).toMatchObject({ kind: 'label', order: mixedOrders[2] });
+    expect(pages[2]).toMatchObject({ kind: 'slip', order: mixedOrders[0] });
+    expect(pages[3]).toMatchObject({ kind: 'slip', order: mixedOrders[1] });
+    expect(pages[4]).toMatchObject({ kind: 'slip', order: mixedOrders[2] });
+  });
+
+  it('SLIPS_FIRST mode: all slips first, then labels with capability', () => {
+    const pages = arrangePrintPages(mixedOrders, 'SLIPS_FIRST');
+    expect(pages.length).toBe(5);
+    expect(pages[0]).toMatchObject({ kind: 'slip', order: mixedOrders[0] });
+    expect(pages[1]).toMatchObject({ kind: 'slip', order: mixedOrders[1] });
+    expect(pages[2]).toMatchObject({ kind: 'slip', order: mixedOrders[2] });
+    expect(pages[3]).toMatchObject({ kind: 'label', order: mixedOrders[0] });
+    expect(pages[4]).toMatchObject({ kind: 'label', order: mixedOrders[2] });
+  });
+
+  it('emits only slips when all orders are none', () => {
     const pages = arrangePrintPages(orders, 'PAIR');
-    expect(pages.length).toBe(6);
-    expect(pages[0]).toMatchObject({ kind: 'label', order: orders[0] });
-    expect(pages[1]).toMatchObject({ kind: 'slip', order: orders[0] });
-    expect(pages[2]).toMatchObject({ kind: 'label', order: orders[1] });
-    expect(pages[3]).toMatchObject({ kind: 'slip', order: orders[1] });
-    expect(pages[4]).toMatchObject({ kind: 'label', order: orders[2] });
-    expect(pages[5]).toMatchObject({ kind: 'slip', order: orders[2] });
-  });
-
-  it('LABELS_FIRST mode: all labels then all slips', () => {
-    const pages = arrangePrintPages(orders, 'LABELS_FIRST');
-    expect(pages.length).toBe(6);
-    expect(pages[0]).toMatchObject({ kind: 'label', order: orders[0] });
-    expect(pages[1]).toMatchObject({ kind: 'label', order: orders[1] });
-    expect(pages[2]).toMatchObject({ kind: 'label', order: orders[2] });
-    expect(pages[3]).toMatchObject({ kind: 'slip', order: orders[0] });
-    expect(pages[4]).toMatchObject({ kind: 'slip', order: orders[1] });
-    expect(pages[5]).toMatchObject({ kind: 'slip', order: orders[2] });
-  });
-
-  it('SLIPS_FIRST mode: all slips then all labels', () => {
-    const pages = arrangePrintPages(orders, 'SLIPS_FIRST');
-    expect(pages.length).toBe(6);
-    expect(pages[0]).toMatchObject({ kind: 'slip', order: orders[0] });
-    expect(pages[1]).toMatchObject({ kind: 'slip', order: orders[1] });
-    expect(pages[2]).toMatchObject({ kind: 'slip', order: orders[2] });
-    expect(pages[3]).toMatchObject({ kind: 'label', order: orders[0] });
-    expect(pages[4]).toMatchObject({ kind: 'label', order: orders[1] });
-    expect(pages[5]).toMatchObject({ kind: 'label', order: orders[2] });
+    expect(pages.length).toBe(3);
+    expect(pages.every((page) => page.kind === 'slip')).toBe(true);
+    expect(pages.map((page) => page.order.orderId)).toEqual([1, 2, 3]);
   });
 });
 

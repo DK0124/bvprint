@@ -35,6 +35,10 @@ function makeOrder(overrides: Partial<PrintOrder['order']> = {}): PrintOrder {
       ...overrides,
     },
     provider: 'tcat',
+    labelPlan: {
+      capability: 'none',
+      displayText: '無物流單',
+    },
   };
 }
 
@@ -105,6 +109,11 @@ describe('renderThermalSlipHtml', () => {
     const html = renderThermalSlipHtml(makeOrder({ payStatus: 2, logStatus: 3 }));
     expect(html).toContain('已付款');
     expect(html).toContain('已出貨');
+  });
+
+  it('renders no-label status text when label capability is none', () => {
+    const html = renderThermalSlipHtml(makeOrder());
+    expect(html).toContain('物流單：無物流單');
   });
 
   it('escapes HTML in user data', () => {

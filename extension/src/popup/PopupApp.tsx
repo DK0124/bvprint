@@ -21,8 +21,10 @@ import type {
 } from '../types/index.js';
 import { makePrintSeq } from '../core/sequence.js';
 import { detectProvider } from '../core/provider.js';
+import { planLabel } from '../core/labelPlan.js';
 import { normalizeOrder } from '../bvshop/normalize.js';
 import { buildPrintOrders } from '../print/renderer.js';
+import { bvshopOriginOf } from '../bvshop/origin.js';
 import {
   getPaymentStatusLabel,
   getLogisticStatusLabel,
@@ -167,7 +169,7 @@ export function PopupApp() {
         setOrders([]);
         setSortedIds([]);
         setNotice({
-          text: '請先開啟並登入 BVSHOP 後台分頁(https://bvshop-manage.bvshop.tw/order),再回到這裡重新抓取。',
+          text: '請先開啟並登入 BVSHOP 後台 /order 分頁，再回到這裡重新抓取。',
           type: 'warning',
         });
         return;
@@ -249,7 +251,8 @@ export function PopupApp() {
       return;
     }
 
-    const printOrders = buildPrintOrders(orders, sortedIds);
+    const tab = await findBvshopTab();
+    const printOrders = buildPrintOrders(orders, sortedIds, bvshopOriginOf(tab?.url));
     const request: PrintRequestMessage = {
       type: 'PRINT_REQUEST',
       orders: printOrders,
@@ -361,6 +364,7 @@ export function PopupApp() {
 
                     const seqText = makePrintSeq(index, total);
                     const provider = detectProvider(order.logisticMethod);
+                    const labelPlan = planLabel(order);
 
                     return (
                       <tr
@@ -383,6 +387,13 @@ export function PopupApp() {
                           {order.logisticMethod || '—'}
                           {' '}
                           <span className="badge badge-muted" style={{ fontSize: 9 }}>{provider}</span>
+                          {' '}
+                          <span
+                            className={`badge ${labelPlan.capability === 'none' ? 'badge-warning' : 'badge-info'}`}
+                            style={{ fontSize: 9 }}
+                          >
+                            {labelPlan.displayText}
+                          </span>
                         </td>
                         <td>
                           <span className={getStatusBadgeClass(order.payStatus)}>

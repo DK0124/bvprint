@@ -10,6 +10,7 @@ import { renderThermalSlipPageHtml } from '../templates/thermal.js';
 import { arrangePrintPairs } from '../core/sort.js';
 import { makePrintSeq } from '../core/sequence.js';
 import { detectProvider } from '../core/provider.js';
+import { planLabel } from '../core/labelPlan.js';
 
 export interface PrintRenderer {
   render(orders: PrintOrder[], settings: PrintSettings): Promise<void>;
@@ -60,7 +61,8 @@ export class PdfLibRenderer implements PrintRenderer {
 
 export function buildPrintOrders(
   orders: PrintOrderData[],
-  sortedIds: string[]
+  sortedIds: string[],
+  origin?: string
 ): PrintOrder[] {
   const ordered = sortedIds
     .map((id) => orders.find((order) => String(order.orderId) === id))
@@ -76,5 +78,6 @@ export function buildPrintOrders(
     printSeqText: makePrintSeq(index, total),
     order,
     provider: detectProvider(order.logisticMethod),
+    labelPlan: planLabel(order, origin),
   }));
 }
