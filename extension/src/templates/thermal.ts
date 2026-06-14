@@ -1,7 +1,6 @@
 import type { PrintOrder } from '../types/index.js';
-import { ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL, LOGISTIC_STATUS_LABEL } from '../bvshop/labels.js';
+import { getLogisticStatusLabel, getPaymentStatusLabel } from '../bvshop/labels.js';
 
-/** CSS for 100×150mm thermal slip (injected into print document) */
 export const THERMAL_SLIP_CSS = `
 @page {
   size: 100mm 150mm;
@@ -105,6 +104,11 @@ footer {
   white-space: nowrap;
 }
 
+.remark .remark-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 footer {
   font-weight: 700;
   font-size: 12px;
@@ -115,51 +119,26 @@ footer {
 }
 `;
 
-/**
- * renderThermalSlipHtml — 產生單筆 100×150mm 熱感出貨明細 HTML fragment
- *
- * 顯示欄位依規格第 8 節:
- * - 流水編號 (大字置頂)
- * - 訂單編號 uid
- * - 訂單日期
- * - 收件人、電話
- * - 地址 (宅配才顯示)
- * - 超商門市 (超商才顯示)
- * - 物流方式、付款方式、付款狀態
- * - 商品明細 (orderItems + customizeItems)
- * - 訂單備註
- * - 總金額
- */
 export function renderThermalSlipHtml(po: PrintOrder): string {
   const { order, printSeqText } = po;
-  const isCvs = !!order.cvs;
+  const payStatusLabel = getPaymentStatusLabel(order.payStatus);
+  const logStatusLabel = getLogisticStatusLabel(order.logStatus);
+  const dateStr = order.createdAt ? order.createdAt.slice(0, 10) : '';
 
-  // Receiver section
   const receiverHtml = `
     <section class="receiver">
       <div>收件人：${esc(order.receiverName)}</div>
       <div>電話：${esc(order.receiverPhone)}</div>
-      ${!isCvs ? `<div class="address">地址：${esc(order.receiverAddress)}</div>` : ''}
-      ${isCvs && order.cvs ? `<div class="cvs">門市：${esc(order.cvs.storeName)} / ${esc(String(order.cvs.storeNum))}</div>` : ''}
+      ${order.isCvs
+        ? `<div class="cvs">門市：${esc(order.cvsStoreName)} / ${esc(order.cvsStoreNum)}</div>`
+        : `<div class="address">地址：${esc(order.address)}</div>`}
     </section>`;
 
-  // Meta section
-  const payStatusLabel = PAYMENT_STATUS_LABEL[order.paymentStatus] ?? String(order.paymentStatus);
-  const orderStatusLabel = ORDER_STATUS_LABEL[order.orderStatus] ?? String(order.orderStatus);
-  const metaHtml = `
-    <section class="meta">
-      <div>物流：${esc(order.logisticMethod)}</div>
-      <div>付款：${esc(order.paymentMethod)} / ${esc(payStatusLabel)}</div>
-      <div>訂單狀態：${esc(orderStatusLabel)}</div>
-    </section>`;
-
-  // Items section
-  const allItems = [...(order.orderItems ?? []), ...(order.customizeItems ?? [])];
-  const itemsHtml = allItems.length > 0
-    ? `<section class="items">${allItems.map((item) => `
+  const itemsHtml = order.items.length > 0
+    ? `<section class="items">${order.items.map((item) => `
       <div class="item">
         <div class="name">
-          ${esc(item.name)}
+          ${esc(item.title)}
           ${item.spec ? `<div class="spec">${esc(item.spec)}</div>` : ''}
         </div>
         <div class="qty">x${esc(String(item.qty))}</div>
@@ -167,34 +146,30 @@ export function renderThermalSlipHtml(po: PrintOrder): string {
     </section>`
     : '';
 
-  // Remark
   const remarkHtml = order.remark
-    ? `<section class="remark">備註：${esc(order.remark)}</section>`
+    ? `<section class="remark"><div>備註：</div><div class="remark-text">${esc(order.remark)}</div></section>`
     : '';
-
-  // Footer
-  const footerHtml = `<footer>總額：$${Number(order.totalPrice).toLocaleString()}</footer>`;
-
-  // Date
-  const dateStr = order.createdAt ? order.createdAt.slice(0, 10) : '';
 
   return `
 <section class="slip slip-100x150">
   <header class="slip-header">
     <div class="seq">#${esc(printSeqText)}</div>
     <div class="title">出貨明細</div>
-    <div class="order-no">訂單：${esc(order.uid)}</div>
+    <div class="order-no">訂單：${esc(order.orderCode)}</div>
     ${dateStr ? `<div class="order-date">${esc(dateStr)}</div>` : ''}
   </header>
   ${receiverHtml}
-  ${metaHtml}
+  <section class="meta">
+    <div>物流：${esc(order.logisticMethod)}</div>
+    <div>付款：${esc(order.paymentMethod)} / ${esc(payStatusLabel)}</div>
+    <div>出貨狀態：${esc(logStatusLabel)}</div>
+  </section>
   ${itemsHtml}
   ${remarkHtml}
-  ${footerHtml}
+  <footer>總額：$${esc(order.totalText || Number(order.totalPrice).toLocaleString())}</footer>
 </section>`;
 }
 
-/** HTML-escape a string */
 function esc(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -204,9 +179,6 @@ function esc(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-/**
- * renderThermalSlipPageHtml — Wrap one or more slip fragments into a full HTML document
- */
 export function renderThermalSlipPageHtml(orders: PrintOrder[]): string {
   const slips = orders.map(renderThermalSlipHtml).join('\n');
   return `<!DOCTYPE html>

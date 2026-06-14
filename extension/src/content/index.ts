@@ -5,27 +5,24 @@
  *
  * 功能:
  * 1. 注入「🖨 出貨列印助手」浮動按鈕到後台頁面
- * 2. 點擊時讀取已勾選訂單 (scrapeCheckedOrders)
- * 3. 將訂單資料發送給 popup (透過 chrome.storage.local 暫存)
- *
- * ⚠️  DOM 選擇器需在真實後台用 DevTools 確認後微調
- *    (見 src/bvshop/selectors.ts)
+ * 2. 點擊時讀取目前頁面已勾選的 order IDs
+ * 3. 合併去重後存到 chrome.storage.local，供 popup 跨頁累積使用
+ * 4. 回應 popup 對「目前頁勾選」的即時查詢（單頁模式 fallback）
  */
 
-import { scrapeCheckedOrders } from '../bvshop/scraper.js';
-import type { ContentToPopupMessage, ScrapedOrder } from '../types/index.js';
+import { scrapeCheckedOrderIds } from '../bvshop/scraper.js';
+import type { SelectedIdsUpdatedMessage } from '../types/index.js';
 
 const BUTTON_ID = 'bvshop-print-assistant-btn';
-const STORAGE_KEY = 'bvshop_print_checked_orders';
+const STORAGE_KEY_SELECTED_IDS = 'bvshop_selected_ids';
 
-/** Inject the floating print button if not already present */
 function injectPrintButton(): void {
   if (document.getElementById(BUTTON_ID)) return;
 
   const btn = document.createElement('button');
   btn.id = BUTTON_ID;
   btn.textContent = '🖨 出貨列印助手';
-  btn.title = 'BVSHOP 出貨列印助手 — 點擊讀取已勾選訂單';
+  btn.title = '累積本頁勾選訂單，供 popup 跨頁列印使用';
 
   Object.assign(btn.style, {
     position: 'fixed',
@@ -53,39 +50,70 @@ function injectPrintButton(): void {
 async function handlePrintButtonClick(): Promise<void> {
   const btn = document.getElementById(BUTTON_ID) as HTMLButtonElement | null;
   if (btn) {
-    btn.textContent = '⏳ 讀取中…';
+    btn.textContent = '⏳ 累積中…';
     btn.disabled = true;
   }
 
   try {
-    const orders: ScrapedOrder[] = scrapeCheckedOrders(document);
+    const currentIds = scrapeCheckedOrderIds(document);
 
-    if (orders.length === 0) {
+    if (currentIds.length === 0) {
       showNotice('❗ 請先勾選至少一筆訂單', 'warning');
       return;
     }
 
-    // Store in chrome.storage.local so popup can read it
-    const msg: ContentToPopupMessage = { type: 'CHECKED_ORDERS', orders };
-    await chrome.storage.local.set({ [STORAGE_KEY]: msg });
+    const result = await chrome.storage.local.get(STORAGE_KEY_SELECTED_IDS);
+    const existingIds = normalizeStoredIds(result[STORAGE_KEY_SELECTED_IDS]);
+    const mergedIds = mergeUniqueIds(existingIds, currentIds);
+    const addedCount = mergedIds.length - existingIds.length;
 
-    // Also send a message to any open extension popup
+    await chrome.storage.local.set({ [STORAGE_KEY_SELECTED_IDS]: mergedIds });
+
+    const message: SelectedIdsUpdatedMessage = {
+      type: 'SELECTED_IDS_UPDATED',
+      orderIds: mergedIds,
+      addedCount,
+    };
+
     try {
-      await chrome.runtime.sendMessage(msg);
+      await chrome.runtime.sendMessage(message);
     } catch {
-      // Popup may not be open — that's fine, storage is the fallback
+      // Popup may not be open — storage remains the source of truth.
     }
 
-    showNotice(`✅ 已讀取 ${orders.length} 筆勾選訂單，請開啟擴充功能圖示`, 'success');
+    showNotice(
+      `✅ 已累積 ${mergedIds.length} 筆（本頁新增 ${addedCount} 筆）。切換頁面後可再次點擊累積，完成後開啟擴充列印。`,
+      'success'
+    );
   } catch (err) {
-    console.error('[BVSHOP Print] scrapeCheckedOrders error:', err);
-    showNotice('❌ 讀取訂單時發生錯誤，請開啟 DevTools 查看詳情', 'error');
+    console.error('[BVSHOP Print] accumulate selected order ids error:', err);
+    showNotice('❌ 累積訂單時發生錯誤，請開啟 DevTools 查看詳情', 'error');
   } finally {
     if (btn) {
       btn.textContent = '🖨 出貨列印助手';
       btn.disabled = false;
     }
   }
+}
+
+function mergeUniqueIds(existingIds: string[], nextIds: string[]): string[] {
+  const seen = new Set(existingIds);
+  const merged = [...existingIds];
+
+  for (const id of nextIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      merged.push(id);
+    }
+  }
+
+  return merged;
+}
+
+function normalizeStoredIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((id) => String(id).trim()).filter(Boolean)
+    : [];
 }
 
 function showNotice(text: string, type: 'success' | 'warning' | 'error'): void {
@@ -104,25 +132,33 @@ function showNotice(text: string, type: 'success' | 'warning' | 'error'): void {
     fontWeight: '600',
     fontFamily: 'system-ui, -apple-system, sans-serif',
     boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-    maxWidth: '320px',
+    maxWidth: '360px',
     lineHeight: '1.5',
   });
   notice.textContent = text;
   document.body.appendChild(notice);
-  setTimeout(() => notice.remove(), 4000);
+  setTimeout(() => notice.remove(), 4500);
 }
 
-// ── Init ──────────────────────────────────────────────────
+function registerMessageHandler(): void {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === 'GET_CURRENT_PAGE_SELECTED_IDS') {
+      sendResponse({ orderIds: scrapeCheckedOrderIds(document) });
+      return true;
+    }
+    return undefined;
+  });
+}
 
 function init(): void {
-  // Wait for body to be available
   if (document.body) {
     injectPrintButton();
   } else {
     document.addEventListener('DOMContentLoaded', injectPrintButton);
   }
 
-  // Re-inject if SPA navigation replaces the button
+  registerMessageHandler();
+
   const observer = new MutationObserver(() => {
     if (!document.getElementById(BUTTON_ID)) {
       injectPrintButton();

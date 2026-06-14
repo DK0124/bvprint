@@ -2,32 +2,35 @@
  * PopupApp — BVSHOP 出貨列印助手 Popup
  *
  * 功能:
- * - 顯示從 content script 傳來的已勾選訂單清單
+ * - 讀取 chrome.storage.local 累積的訂單 IDs
+ * - 用 /order/query?order_ids=... 重新抓取真實完整資料
+ * - 若尚未累積資料，fallback 直接詢問目前頁 content script 的勾選 IDs（單頁模式）
  * - 拖曳排序 + 即時流水號
  * - 列印設定 (寄件人、紙張、排序模式)
- * - 補完訂單明細 (同源 fetch)
- * - 產生列印按鈕
+ * - 提醒已存在 tracking code 的訂單
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type {
-  ScrapedOrder,
   PrintSettings,
   PrintMode,
   PaperSize,
   PrintRequestMessage,
+  PrintOrderData,
+  SelectedIdsUpdatedMessage,
 } from '../types/index.js';
 import { makePrintSeq } from '../core/sequence.js';
 import { detectProvider } from '../core/provider.js';
-import { fetchOrderDetail } from '../bvshop/fetcher.js';
+import { fetchOrdersByIds } from '../bvshop/fetcher.js';
+import { normalizeOrder } from '../bvshop/normalize.js';
 import { buildPrintOrders } from '../print/renderer.js';
 import {
-  getOrderStatusLabel,
   getPaymentStatusLabel,
   getLogisticStatusLabel,
 } from '../bvshop/labels.js';
 
-const STORAGE_KEY_ORDERS = 'bvshop_print_checked_orders';
+const STORAGE_KEY_SELECTED_IDS = 'bvshop_selected_ids';
+const LEGACY_STORAGE_KEY_ORDERS = 'bvshop_print_checked_orders';
 const STORAGE_KEY_SETTINGS = 'bvshop_print_settings';
 
 const DEFAULT_SETTINGS: PrintSettings = {
@@ -38,111 +41,188 @@ const DEFAULT_SETTINGS: PrintSettings = {
 };
 
 export function PopupApp() {
-  const [orders, setOrders] = useState<ScrapedOrder[]>([]);
+  const [orders, setOrders] = useState<PrintOrderData[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sortedIds, setSortedIds] = useState<string[]>([]);
   const [settings, setSettings] = useState<PrintSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
-  const [fetchingDetail, setFetchingDetail] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<{ text: string; type: 'info' | 'warning' | 'error' | 'success' } | null>(null);
 
-  // Drag state
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // ── Load initial data ──────────────────────────────────
   useEffect(() => {
-    loadFromStorage();
+    void loadInitialState();
   }, []);
 
-  // Listen for content script messages
   useEffect(() => {
     const listener = (msg: unknown) => {
-      const m = msg as { type: string; orders?: ScrapedOrder[] };
-      if (m?.type === 'CHECKED_ORDERS' && m.orders) {
-        applyOrders(m.orders);
+      const message = msg as SelectedIdsUpdatedMessage;
+      if (message?.type === 'SELECTED_IDS_UPDATED') {
+        void applySelectedIds(message.orderIds, {
+          source: 'storage',
+          noticeText: `✅ 已同步累積 ${message.orderIds.length} 筆（本頁新增 ${message.addedCount ?? 0} 筆）。`,
+          noticeType: 'success',
+        });
       }
     };
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
 
-  async function loadFromStorage() {
+  async function loadInitialState() {
     setLoading(true);
     try {
-      const result = await chrome.storage.local.get([STORAGE_KEY_ORDERS, STORAGE_KEY_SETTINGS]);
-      const msg = result[STORAGE_KEY_ORDERS] as { type: string; orders: ScrapedOrder[] } | undefined;
-      if (msg?.orders) applyOrders(msg.orders);
+      const result = await chrome.storage.local.get([
+        STORAGE_KEY_SELECTED_IDS,
+        LEGACY_STORAGE_KEY_ORDERS,
+        STORAGE_KEY_SETTINGS,
+      ]);
 
-      const saved = result[STORAGE_KEY_SETTINGS] as Partial<PrintSettings> | undefined;
-      if (saved) setSettings((prev) => ({ ...prev, ...saved }));
+      const savedSettings = result[STORAGE_KEY_SETTINGS] as Partial<PrintSettings> | undefined;
+      if (savedSettings) {
+        setSettings((prev) => ({ ...prev, ...savedSettings }));
+      }
+
+      const storedIds = normalizeIds(result[STORAGE_KEY_SELECTED_IDS]);
+      if (storedIds.length > 0) {
+        await applySelectedIds(storedIds, { source: 'storage' });
+        return;
+      }
+
+      await chrome.storage.local.remove(LEGACY_STORAGE_KEY_ORDERS);
+
+      const currentPageIds = await requestCurrentPageSelectedIds();
+      if (currentPageIds.length > 0) {
+        await applySelectedIds(currentPageIds, {
+          source: 'current-page',
+          noticeText: 'ℹ️ 未偵測到累積清單，已直接讀取目前頁勾選訂單（單頁模式）。',
+          noticeType: 'info',
+          persist: false,
+        });
+        return;
+      }
+
+      setOrders([]);
+      setSelectedIds([]);
+      setSortedIds([]);
+      setNotice({
+        text: '尚未找到累積訂單，也無法直接讀取目前頁勾選。請先到 BVSHOP /order 頁勾選後，點右下角按鈕累積本頁訂單。',
+        type: 'info',
+      });
     } finally {
       setLoading(false);
     }
   }
 
-  function applyOrders(newOrders: ScrapedOrder[]) {
-    setOrders(newOrders);
-    setSortedIds(newOrders.map((o) => o.orderId));
-    const hasPartial = newOrders.some((o) => o.partial);
-    if (hasPartial) {
-      setNotice({
-        text: '部分訂單資料不完整（⚠），點「補完明細」可嘗試透過登入 session 取得完整資料。',
-        type: 'warning',
-      });
+  async function requestCurrentPageSelectedIds(): Promise<string[]> {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (tabId == null) return [];
+
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_CURRENT_PAGE_SELECTED_IDS' }) as
+        | { orderIds?: unknown }
+        | undefined;
+
+      return normalizeIds(response?.orderIds);
+    } catch {
+      return [];
     }
   }
 
-  // ── Settings persistence ───────────────────────────────
-  async function saveSettings(s: PrintSettings) {
-    await chrome.storage.local.set({ [STORAGE_KEY_SETTINGS]: s });
+  async function applySelectedIds(
+    ids: string[],
+    options: {
+      source: 'storage' | 'current-page';
+      noticeText?: string;
+      noticeType?: 'info' | 'warning' | 'error' | 'success';
+      persist?: boolean;
+    }
+  ) {
+    const nextIds = normalizeIds(ids);
+    setSelectedIds(nextIds);
+
+    if (options.persist !== false && options.source === 'storage') {
+      await chrome.storage.local.set({ [STORAGE_KEY_SELECTED_IDS]: nextIds });
+    }
+
+    if (nextIds.length === 0) {
+      setOrders([]);
+      setSortedIds([]);
+      if (options.noticeText) {
+        setNotice({ text: options.noticeText, type: options.noticeType ?? 'info' });
+      }
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      const rawOrders = await fetchOrdersByIds(nextIds);
+      const normalizedOrders = rawOrders.map(normalizeOrder);
+      const ordersById = new Map(normalizedOrders.map((order) => [String(order.orderId), order]));
+      const ordered = nextIds
+        .map((id) => ordersById.get(id))
+        .filter((order): order is PrintOrderData => order != null);
+      const missingIds = nextIds.filter((id) => !ordersById.has(id));
+
+      setOrders(ordered);
+      setSortedIds((current) => {
+        const fetchedIds = ordered.map((order) => String(order.orderId));
+        const kept = current.filter((id) => fetchedIds.includes(id));
+        const appended = fetchedIds.filter((id) => !kept.includes(id));
+        return kept.length > 0 ? [...kept, ...appended] : fetchedIds;
+      });
+
+      if (options.noticeText) {
+        setNotice({ text: options.noticeText, type: options.noticeType ?? 'info' });
+      } else if (missingIds.length > 0) {
+        setNotice({
+          text: `⚠️ 有 ${missingIds.length} 筆訂單未成功載入（ID: ${missingIds.join(', ')}）。請確認後台登入狀態後重新抓取。`,
+          type: 'warning',
+        });
+      } else {
+        setNotice({
+          text: `✅ 已載入 ${ordered.length} 筆訂單資料。`,
+          type: 'success',
+        });
+      }
+    } catch (error) {
+      setOrders([]);
+      setSortedIds([]);
+      setNotice({
+        text: `❌ 讀取訂單資料失敗：${String(error)}`,
+        type: 'error',
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function handleRefresh() {
+    const ids = selectedIds.length > 0 ? selectedIds : await requestCurrentPageSelectedIds();
+    await applySelectedIds(ids, {
+      source: selectedIds.length > 0 ? 'storage' : 'current-page',
+      noticeText: '⏳ 已重新抓取最新訂單資料。',
+      noticeType: 'info',
+      persist: selectedIds.length > 0,
+    });
+  }
+
+  async function saveSettings(nextSettings: PrintSettings) {
+    await chrome.storage.local.set({ [STORAGE_KEY_SETTINGS]: nextSettings });
   }
 
   function updateSettings(patch: Partial<PrintSettings>) {
     const next = { ...settings, ...patch };
     setSettings(next);
-    saveSettings(next);
+    void saveSettings(next);
   }
 
-  // ── Fetch detail ───────────────────────────────────────
-  async function handleFetchDetail() {
-    setFetchingDetail(true);
-    setNotice({ text: '⏳ 正在補完訂單明細…', type: 'info' });
-
-    let successCount = 0;
-    let failCount = 0;
-
-    const updated = await Promise.all(
-      orders.map(async (order) => {
-        if (order.detail) return order; // already fetched
-        if (!order.orderId) { failCount++; return order; }
-        const detail = await fetchOrderDetail(order.orderId);
-        if (detail) {
-          successCount++;
-          return { ...order, detail, partial: false };
-        } else {
-          failCount++;
-          return order;
-        }
-      })
-    );
-
-    setOrders(updated);
-    setFetchingDetail(false);
-
-    if (failCount === 0) {
-      setNotice({ text: `✅ 已補完全部 ${successCount} 筆訂單明細`, type: 'success' });
-    } else {
-      setNotice({
-        text: `⚠ 已補完 ${successCount} 筆，${failCount} 筆失敗（可能需確認登入狀態或 API 路徑）`,
-        type: 'warning',
-      });
-    }
-  }
-
-  // ── Print ──────────────────────────────────────────────
   async function handlePrint() {
-    if (sortedIds.length === 0) {
-      setNotice({ text: '請先到 BVSHOP 後台勾選訂單', type: 'warning' });
+    if (sortedIds.length === 0 || orders.length === 0) {
+      setNotice({ text: '請先在 /order 頁勾選訂單，並累積或重新抓取資料。', type: 'warning' });
       return;
     }
 
@@ -154,19 +234,17 @@ export function PopupApp() {
     };
 
     await chrome.runtime.sendMessage({ type: 'OPEN_PRINT_VIEW', ...request });
-    setNotice({ text: '✅ 已開啟列印視圖，請在新分頁確認後列印', type: 'success' });
+    setNotice({ text: '✅ 已開啟列印視圖，請在新分頁確認後列印。', type: 'success' });
   }
 
-  // ── Clear ──────────────────────────────────────────────
   async function handleClear() {
-    await chrome.runtime.sendMessage({ type: 'CLEAR_ORDERS' });
-    await chrome.storage.local.remove(STORAGE_KEY_ORDERS);
+    await chrome.storage.local.remove([STORAGE_KEY_SELECTED_IDS, LEGACY_STORAGE_KEY_ORDERS]);
     setOrders([]);
+    setSelectedIds([]);
     setSortedIds([]);
-    setNotice(null);
+    setNotice({ text: '🗑 已清除累積訂單 ID。', type: 'info' });
   }
 
-  // ── Drag & Drop ────────────────────────────────────────
   function handleDragStart(index: number) {
     dragIndexRef.current = index;
   }
@@ -182,6 +260,7 @@ export function PopupApp() {
       setDragOverIndex(null);
       return;
     }
+
     const next = [...sortedIds];
     const [moved] = next.splice(fromIndex, 1);
     next.splice(dropIndex, 0, moved);
@@ -195,25 +274,21 @@ export function PopupApp() {
     setDragOverIndex(null);
   }
 
-  // ── Render helpers ─────────────────────────────────────
   const total = sortedIds.length;
+  const trackingWarnings = orders.filter((order) => order.trackingCode);
 
-  function getOrderByIndex(index: number): ScrapedOrder | undefined {
+  function getOrderByIndex(index: number): PrintOrderData | undefined {
     const id = sortedIds[index];
-    return orders.find((o) => o.orderId === id);
+    return orders.find((order) => String(order.orderId) === id);
   }
 
-  function getStatusBadgeClass(status: string): string {
-    const n = Number(status);
-    // logistic status
-    if (n === 1) return 'badge badge-warning';
-    if (n === 2) return 'badge badge-info';
-    if (n === 3 || n === 4 || n === 5) return 'badge badge-success';
-    if (n < 0) return 'badge badge-danger';
+  function getStatusBadgeClass(status: number): string {
+    if (status === 1) return 'badge badge-warning';
+    if (status === 2) return 'badge badge-info';
+    if (status === 3 || status === 4 || status === 5) return 'badge badge-success';
+    if (status < 0) return 'badge badge-danger';
     return 'badge badge-muted';
   }
-
-  // ── Render ─────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -236,12 +311,13 @@ export function PopupApp() {
 
         {orders.length === 0 ? (
           <div className="empty-state">
-            <p>尚無勾選訂單。</p>
-            <p>請先登入 BVSHOP 後台，前往 <strong>/order</strong> 頁面，勾選訂單後點擊頁面右下角「🖨 出貨列印助手」按鈕。</p>
+            <p>尚無可列印的訂單資料。</p>
+            <p>請先登入 BVSHOP 後台 <strong>/order</strong>，勾選訂單後點右下角「🖨 出貨列印助手」累積本頁勾選。</p>
+            <p>如果只在目前頁勾選，也可以直接開啟 popup，系統會嘗試讀取當前頁勾選作為單頁模式後備。</p>
           </div>
         ) : (
           <>
-            <div className="section-title">已勾選訂單（可拖曳排序）</div>
+            <div className="section-title">已載入訂單（可拖曳排序）</div>
             <div className="order-table-wrap">
               <table>
                 <thead>
@@ -259,14 +335,9 @@ export function PopupApp() {
                   {sortedIds.map((id, index) => {
                     const order = getOrderByIndex(index);
                     if (!order) return null;
+
                     const seqText = makePrintSeq(index, total);
                     const provider = detectProvider(order.logisticMethod);
-                    const payLabel = order.detail
-                      ? getPaymentStatusLabel(order.detail.paymentStatus)
-                      : order.paymentStatus;
-                    const logLabel = order.detail
-                      ? getLogisticStatusLabel(order.detail.logisticStatus)
-                      : order.logisticStatus;
 
                     return (
                       <tr
@@ -281,8 +352,8 @@ export function PopupApp() {
                         <td className="drag-handle" title="拖曳排序">⠿</td>
                         <td className="seq-cell">#{seqText}</td>
                         <td>
-                          {order.orderUid || id}
-                          {order.partial && <span className="partial-badge" title="資料不完整">⚠</span>}
+                          {order.orderCode || id}
+                          {order.trackingCode && <span className="tracking-badge" title="已有物流追蹤碼">⚠ 追蹤碼</span>}
                         </td>
                         <td>{order.receiverName || '—'}</td>
                         <td>
@@ -291,13 +362,13 @@ export function PopupApp() {
                           <span className="badge badge-muted" style={{ fontSize: 9 }}>{provider}</span>
                         </td>
                         <td>
-                          <span className={getStatusBadgeClass(order.paymentStatus)}>
-                            {payLabel}
+                          <span className={getStatusBadgeClass(order.payStatus)}>
+                            {getPaymentStatusLabel(order.payStatus)}
                           </span>
                         </td>
                         <td>
-                          <span className={getStatusBadgeClass(order.logisticStatus)}>
-                            {logLabel}
+                          <span className={getStatusBadgeClass(order.logStatus)}>
+                            {getLogisticStatusLabel(order.logStatus)}
                           </span>
                         </td>
                       </tr>
@@ -308,20 +379,29 @@ export function PopupApp() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <span style={{ fontSize: 11, color: '#666' }}>共 {total} 筆訂單</span>
+              <span style={{ fontSize: 11, color: '#666' }}>共 {total} 筆訂單（累積 ID：{selectedIds.length}）</span>
               <button
                 className="btn btn-secondary"
                 style={{ flex: 'none', padding: '4px 10px', fontSize: 11 }}
-                onClick={handleFetchDetail}
-                disabled={fetchingDetail}
+                onClick={handleRefresh}
+                disabled={refreshing}
               >
-                {fetchingDetail ? '⏳ 補完中…' : '🔄 補完明細'}
+                {refreshing ? '⏳ 重新抓取中…' : '🔄 重新抓取'}
               </button>
             </div>
+
+            {trackingWarnings.length > 0 && (
+              <div className="tracking-warning-list">
+                {trackingWarnings.map((order) => (
+                  <div key={order.orderId} className="notice notice-warning">
+                    訂單 {order.orderCode} 已有物流追蹤碼，可能已出貨/已建立物流單。
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
-        {/* ── Settings ── */}
         <div className="section-title" style={{ marginTop: 14 }}>列印設定</div>
         <div className="settings-form">
           <div className="form-group">
@@ -372,10 +452,9 @@ export function PopupApp() {
         </div>
 
         <div className="notice notice-info" style={{ marginTop: 8, fontSize: 11 }}>
-          ℹ️ 物流單（黑貓/順豐/綠界/統一金流）為 TODO，MVP 目前只列印熱感出貨明細。
+          ℹ️ 物流單（黑貓/順豐/綠界/PayUni）仍為 TODO；MVP 目前只列印熱感出貨明細，不會自動建立物流單。
         </div>
 
-        {/* ── Actions ── */}
         <div className="action-bar">
           <button
             className="btn btn-primary"
@@ -388,10 +467,20 @@ export function PopupApp() {
             className="btn btn-secondary"
             onClick={handleClear}
           >
-            🗑 清除
+            🗑 清除累積
           </button>
         </div>
       </div>
     </>
+  );
+}
+
+function normalizeIds(value: unknown): string[] {
+  return Array.from(
+    new Set(
+      (Array.isArray(value) ? value : [])
+        .map((id) => String(id).trim())
+        .filter(Boolean)
+    )
   );
 }

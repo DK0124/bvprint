@@ -1,91 +1,72 @@
 import { describe, it, expect } from 'vitest';
-import { scrapeCheckedOrders } from '../src/bvshop/scraper.js';
+import { scrapeCheckedOrderIds, scrapeCheckedOrders } from '../src/bvshop/scraper.js';
 
-/** Helper to create a simple DOM with a fake order table */
-function createFakeOrderTableHtml(orders: Array<{
-  id: string;
-  uid: string;
-  receiver: string;
-  logistic: string;
-  checked: boolean;
-}>): Document {
+function createOrderPageHtml(inputs: Array<{ value: string; checked: boolean }>): Document {
   const html = `
     <!DOCTYPE html>
     <html>
     <body>
-      <table>
-        <tbody>
-          ${orders.map((o) => `
-            <tr data-id="${o.id}" data-uid="${o.uid}">
-              <td><input type="checkbox" ${o.checked ? 'checked' : ''} data-id="${o.id}" /></td>
-              <td>${o.id}</td>
-              <td>${o.uid}</td>
-              <td>${o.receiver}</td>
-              <td>${o.logistic}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <div class="grid">
+        ${inputs.map((input) => `
+          <div class="xl:col-span-1 col-span-12 text-center">
+            <label class="checkbox-area my-2 mx-3">
+              <input type="checkbox" name="order_form_id[]" value="${input.value}" ${input.checked ? 'checked' : ''}>
+              <span></span>
+            </label>
+            <p></p>
+          </div>
+        `).join('')}
+      </div>
     </body>
     </html>
   `;
 
-  const parser = new DOMParser();
-  return parser.parseFromString(html, 'text/html');
+  return new DOMParser().parseFromString(html, 'text/html');
 }
 
-describe('scrapeCheckedOrders', () => {
-  it('returns only checked orders', () => {
-    const doc = createFakeOrderTableHtml([
-      { id: '101', uid: 'UID101', receiver: '王小明', logistic: '黑貓宅急便', checked: true },
-      { id: '102', uid: 'UID102', receiver: '李大華', logistic: '綠界 7-ELEVEN', checked: false },
-      { id: '103', uid: 'UID103', receiver: '陳美麗', logistic: '順豐宅配', checked: true },
+describe('scrapeCheckedOrderIds', () => {
+  it('returns only checked order ids', () => {
+    const doc = createOrderPageHtml([
+      { value: '1726850', checked: true },
+      { value: '1726849', checked: false },
+      { value: '1726848', checked: true },
     ]);
 
-    const result = scrapeCheckedOrders(doc);
-    expect(result).toHaveLength(2);
-    expect(result.map((o) => o.orderId)).toContain('101');
-    expect(result.map((o) => o.orderId)).toContain('103');
-    expect(result.map((o) => o.orderId)).not.toContain('102');
+    expect(scrapeCheckedOrderIds(doc)).toEqual(['1726850', '1726848']);
+  });
+
+  it('deduplicates repeated checked values', () => {
+    const doc = createOrderPageHtml([
+      { value: '1726850', checked: true },
+      { value: '1726850', checked: true },
+      { value: '1726848', checked: true },
+    ]);
+
+    expect(scrapeCheckedOrderIds(doc)).toEqual(['1726850', '1726848']);
   });
 
   it('returns empty array when nothing is checked', () => {
-    const doc = createFakeOrderTableHtml([
-      { id: '201', uid: 'UID201', receiver: '張三', logistic: '黑貓宅急便', checked: false },
+    const doc = createOrderPageHtml([
+      { value: '1726850', checked: false },
     ]);
-    const result = scrapeCheckedOrders(doc);
-    expect(result).toHaveLength(0);
+
+    expect(scrapeCheckedOrderIds(doc)).toEqual([]);
   });
 
-  it('extracts orderId from data-id attribute on row', () => {
-    const doc = createFakeOrderTableHtml([
-      { id: '301', uid: 'UID301', receiver: '孫五', logistic: '黑貓宅急便', checked: true },
+  it('ignores blank values', () => {
+    const doc = createOrderPageHtml([
+      { value: '', checked: true },
+      { value: '1726850', checked: true },
     ]);
-    const result = scrapeCheckedOrders(doc);
-    expect(result[0].orderId).toBe('301');
+
+    expect(scrapeCheckedOrderIds(doc)).toEqual(['1726850']);
   });
 
-  it('does not throw on malformed DOM', () => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString('<html><body></body></html>', 'text/html');
-    expect(() => scrapeCheckedOrders(doc)).not.toThrow();
-    expect(scrapeCheckedOrders(doc)).toHaveLength(0);
-  });
+  it('keeps scrapeCheckedOrders alias compatible', () => {
+    const doc = createOrderPageHtml([
+      { value: '1726850', checked: true },
+    ]);
 
-  it('marks partial=true when required fields are missing', () => {
-    // Row has checkbox but no id / uid
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`
-      <html><body>
-        <table><tbody>
-          <tr><td><input type="checkbox" checked /></td><td></td></tr>
-        </tbody></table>
-      </body></html>
-    `, 'text/html');
-    const result = scrapeCheckedOrders(doc);
-    // If any order is found, it should be partial
-    if (result.length > 0) {
-      expect(result[0].partial).toBe(true);
-    }
+    expect(scrapeCheckedOrders(doc)).toEqual(['1726850']);
   });
 });

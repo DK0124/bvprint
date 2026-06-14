@@ -1,81 +1,67 @@
 // ============================================================
 // Shared TypeScript types for BVSHOP 出貨列印助手 Chrome Extension
-// Ported from packages/bvshop-api types and BVSHOP_PRINT_ASSISTANT_COPILOT_SPEC.md
 // ============================================================
 
-// ------- BVSHOP API Types -------
+// ------- Real BVSHOP /order/query Types -------
 
-export interface BvOrderItem {
-  id: number;
-  name: string;
-  qty: number;
-  price: number;
-  sku?: string | null;
-  /** e.g. size / color variants */
-  spec?: string | null;
-}
-
-export interface BvCvs {
-  storeName: string;
-  storeNum: number;
-  storeBrand: 'unifart' | 'fami' | 'okmart' | 'hilife';
-}
-
-export interface BvInvoice {
-  number?: string | null;
+export interface BvOrderRawAddress {
+  zipcode?: string | number | null;
+  address?: string | null;
+  county?: string | null;
+  town?: string | null;
   [key: string]: unknown;
 }
 
-/** Full order detail from /orders/{id} */
-export interface BvOrderDetail {
-  id: number;
-  uid: string;
-  createdAt: string;
-  paidAt?: string | null;
-  cancelAt?: string | null;
-  shipmentAt?: string | null;
-  shippingAt?: string | null;
-  /** 1=已成立 2=待確認 4=已完成 -1=異常單 -3=已取消 */
-  orderStatus: OrderStatus;
-  /** 1=未付款 2=已付款 -1=已退款 -4=已逾期 */
-  paymentStatus: PaymentStatus;
-  /** 1=未出貨 2=處理中 3=已出貨 4=已配達 5=已取貨 6=退回中 -1=已退貨 */
-  logisticStatus: LogisticStatus;
-  processStatus: 0 | 1;
-  paymentMethod: string;
-  logisticMethod: string;
-  logisticTraceCode?: string | null;
-  discountPrice: number;
-  companyId: string;
-  shippingFee: number;
-  fee: number;
-  totalPrice: number;
-  orderType: 1 | 2 | 3;
-  checkoutUrl: string;
-  receiverName: string;
-  receiverPhone: string;
-  receiverAddress: string;
-  relateOrder?: BvOrder | null;
-  customerId: number;
-  orderItems: BvOrderItem[];
-  customizeItems: BvOrderItem[];
-  dealerCode?: string | null;
-  remark?: string | null;
-  /** Present when logisticMethod is CVS-related */
-  cvs?: BvCvs | null;
-  utmData?: Record<string, unknown>;
-  invoice?: BvInvoice;
+export interface BvOrderRawCvs {
+  storeName?: string | null;
+  storeNum?: string | number | null;
+  ReservedNo?: string | null;
+  [key: string]: unknown;
 }
 
-/** Brief order info from order list */
-export interface BvOrder {
+export interface BvOrderRawLogistics {
+  log_method?: string | null;
+  isCVSorInStore?: boolean | null;
+  [key: string]: unknown;
+}
+
+export interface BvOrderRawItem {
+  title?: string | null;
+  option_sort?: string | null;
+  option_name?: string | null;
+  quantity?: number | null;
+  special_price?: number | null;
+  [key: string]: unknown;
+}
+
+export interface BvOrderRaw {
   id: number;
-  uid: string;
-  createdAt: string;
-  orderStatus: OrderStatus;
-  paymentStatus: PaymentStatus;
-  logisticStatus: LogisticStatus;
-  checkoutUrl: string;
+  order_form_code: string;
+  created_at: string;
+  receiver_name: string;
+  receiver_phone: string;
+  zip_address: string;
+  customer_address?: BvOrderRawAddress | null;
+  customer_cvs?: BvOrderRawCvs | null;
+  logistic_method: string;
+  log_name?: string | null;
+  logistics?: BvOrderRawLogistics | null;
+  payment_method: string;
+  order_pay_status: number;
+  order_log_status: number;
+  status: number;
+  mergeOrderItems?: BvOrderRawItem[] | null;
+  customize_items?: BvOrderRawItem[] | null;
+  remark?: string | null;
+  manage_remark?: string | null;
+  total_price: number;
+  totalText?: string | null;
+  tracking_code?: string | null;
+  submit_info?: {
+    ReceiverName?: string | null;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
 }
 
 // ------- Status Enums -------
@@ -93,13 +79,41 @@ export type LogisticProvider = 'ecpay' | 'payuni' | 'tcat' | 'sf' | 'unknown';
 export type PaperSize = 'THERMAL_100X150' | 'A4' | 'A5' | 'ROLL_80MM';
 export type PrintMode = 'PAIR' | 'LABELS_FIRST' | 'SLIPS_FIRST';
 
+export interface PrintOrderItem {
+  title: string;
+  spec: string;
+  qty: number;
+}
+
+export interface PrintOrderData {
+  orderId: number;
+  orderCode: string;
+  createdAt: string;
+  receiverName: string;
+  receiverPhone: string;
+  isCvs: boolean;
+  address: string;
+  cvsStoreName: string;
+  cvsStoreNum: string;
+  logisticMethod: string;
+  paymentMethod: string;
+  payStatus: number;
+  logStatus: number;
+  orderStatus: number;
+  items: PrintOrderItem[];
+  remark: string;
+  totalPrice: number;
+  totalText: string;
+  trackingCode: string | null;
+}
+
 export interface PrintOrder {
   orderId: number;
-  orderUid: string;
+  orderCode: string;
   sortIndex: number;
   printSeq: number;
   printSeqText: string;
-  order: BvOrderDetail;
+  order: PrintOrderData;
   provider: LogisticProvider;
 }
 
@@ -110,31 +124,12 @@ export interface PrintSettings {
   mode: PrintMode;
 }
 
-/** Scraped from DOM — may be partial; enriched via same-origin fetch */
-export interface ScrapedOrder {
-  /** Numeric order ID (may be empty string if not found) */
-  orderId: string;
-  /** Order UID e.g. "2407081253FRDURE" */
-  orderUid: string;
-  receiverName: string;
-  logisticMethod: string;
-  paymentMethod: string;
-  orderStatus: string;
-  paymentStatus: string;
-  logisticStatus: string;
-  /** Whether DOM scraping was complete */
-  partial: boolean;
-  /** Full detail fetched via same-origin API; null if not yet fetched */
-  detail: BvOrderDetail | null;
+export interface SelectedIdsUpdatedMessage {
+  type: 'SELECTED_IDS_UPDATED';
+  orderIds: string[];
+  addedCount?: number;
 }
 
-/** Message sent from content script → popup */
-export interface ContentToPopupMessage {
-  type: 'CHECKED_ORDERS';
-  orders: ScrapedOrder[];
-}
-
-/** Message sent from popup → background → print tab */
 export interface PrintRequestMessage {
   type: 'PRINT_REQUEST';
   orders: PrintOrder[];
