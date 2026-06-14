@@ -70,8 +70,9 @@ function normalizeNullableText(value: unknown): string | null {
 }
 
 function asText(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number') return String(value);
-  if (typeof value === 'boolean') return '';
-  return '';
+  return typeof value === 'string'
+    ? value
+    : typeof value === 'number'
+      ? String(value)
+      : '';
 }
