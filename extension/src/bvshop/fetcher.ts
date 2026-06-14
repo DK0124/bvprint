@@ -74,7 +74,9 @@ export async function fetchAllOrderIds(queryString = ''): Promise<number[]> {
 
     const json = await response.json();
     return Array.isArray(json?.response)
-      ? json.response.map((id: unknown) => Number(id)).filter((id: number) => !Number.isNaN(id))
+      ? json.response
+        .map((id: unknown) => Number(id))
+        .filter((id: number) => !Number.isNaN(id) && id > 0)
       : [];
   } catch (error) {
     console.warn('[BVSHOP Print] fetchAllOrderIds error:', error);

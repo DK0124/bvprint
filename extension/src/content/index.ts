@@ -144,7 +144,9 @@ function registerMessageHandler(): void {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'GET_CURRENT_PAGE_SELECTED_IDS') {
       sendResponse({ orderIds: scrapeCheckedOrderIds(document) });
+      return true;
     }
+    return undefined;
   });
 }
 
