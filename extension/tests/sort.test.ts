@@ -89,6 +89,18 @@ describe('arrangePrintPages', () => {
     expect(pages[4]).toMatchObject({ kind: 'label', order: mixedOrders[2] });
   });
 
+  it.each<['PAIR' | 'LABELS_FIRST' | 'SLIPS_FIRST']>([
+    ['PAIR'],
+    ['LABELS_FIRST'],
+    ['SLIPS_FIRST'],
+  ])('never emits label page for capability=none in %s mode', (mode) => {
+    const pages = arrangePrintPages(mixedOrders, mode);
+    const hasNoneLabel = pages.some((page) => page.kind === 'label' && page.order.labelPlan.capability === 'none');
+    expect(hasNoneLabel).toBe(false);
+    const noneOrderSlipCount = pages.filter((page) => page.kind === 'slip' && page.order.orderId === 2).length;
+    expect(noneOrderSlipCount).toBe(1);
+  });
+
   it('emits only slips when all orders are none', () => {
     const pages = arrangePrintPages(orders, 'PAIR');
     expect(pages.length).toBe(3);

@@ -30,6 +30,31 @@ body {
   page-break-after: auto;
 }
 
+.label-placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2mm;
+}
+
+.label-placeholder .placeholder-title {
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.label-placeholder .placeholder-line {
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.label-placeholder .placeholder-note {
+  margin-top: 2mm;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .seq {
   font-size: 22px;
   font-weight: 800;
@@ -168,6 +193,18 @@ export function renderThermalSlipHtml(po: PrintOrder): string {
   ${itemsHtml}
   ${remarkHtml}
   <footer>總額：$${esc(order.totalText || Number(order.totalPrice).toLocaleString())}</footer>
+</section>`;
+}
+
+export function renderLabelPlaceholderHtml(po: PrintOrder): string {
+  const { order, printSeqText, labelPlan } = po;
+  return `
+<section class="slip label-placeholder">
+  <div class="seq">#${esc(printSeqText)}</div>
+  <div class="placeholder-title">物流單佔位頁</div>
+  <div class="placeholder-line">訂單：${esc(order.orderCode)}</div>
+  <div class="placeholder-line">類型：${esc(labelPlan.displayText)}</div>
+  <div class="placeholder-note">物流單（待整合）—— 此頁為佔位，實際順豐物流單將於後續版本整合</div>
 </section>`;
 }
 

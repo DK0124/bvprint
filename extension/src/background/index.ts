@@ -6,7 +6,7 @@
  * - 協調 content script ↔ popup 的訊息傳遞
  */
 
-import type { PrintRequestMessage } from '../types/index.js';
+import type { PrintRequestMessage, PrintOrder, PrintSettings } from '../types/index.js';
 
 const STORAGE_KEYS = ['bvshop_selected_ids', 'bvshop_print_checked_orders'];
 
@@ -17,10 +17,21 @@ chrome.runtime.onInstalled.addListener(() => {
 // Handle messages from popup or content script
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'OPEN_PRINT_VIEW') {
-    openPrintView(message as PrintRequestMessage)
-      .then(() => sendResponse({ ok: true }))
-      .catch((err) => sendResponse({ ok: false, error: String(err) }));
-    return true; // keep channel open for async response
+    const request: PrintRequestMessage = {
+      type: 'PRINT_REQUEST',
+      orders: ((message as { orders?: PrintOrder[] }).orders ?? []),
+      settings: ((message as { settings?: PrintSettings }).settings ?? {
+        senderName: '',
+        senderPhone: '',
+        paperSize: 'THERMAL_100X150',
+        mode: 'PAIR',
+      }),
+    };
+
+    sendResponse({ ok: true });
+    void openPrintView(request)
+      .catch((err) => console.error('[BVSHOP Print] openPrintView failed:', err));
+    return false;
   }
 
   if (message?.type === 'CLEAR_ORDERS') {
@@ -30,20 +41,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function openPrintView(request: PrintRequestMessage): Promise<void> {
-  // Encode print data as base64 URL param so the print page can read it
-  const printUrl = chrome.runtime.getURL('print/index.html');
-  const tab = await chrome.tabs.create({ url: printUrl, active: true });
-
-  // Wait briefly then send the print data to the new tab
-  setTimeout(async () => {
-    if (tab.id == null) return;
-    try {
-      await chrome.tabs.sendMessage(tab.id, request);
-    } catch {
-      // Tab may not be ready yet — the print page also reads from storage
-    }
-  }, 500);
-
-  // Also persist to storage as fallback
   await chrome.storage.local.set({ bvshop_print_request: request });
+
+  const printUrl = chrome.runtime.getURL('print/index.html');
+  await chrome.tabs.create({ url: printUrl, active: true });
+
+  // print page 會自行從 storage 讀 bvshop_print_request，避免依賴 popup/訊息通道存活。
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderThermalSlipHtml } from '../src/templates/thermal.js';
+import { renderThermalSlipHtml, renderLabelPlaceholderHtml } from '../src/templates/thermal.js';
 import type { PrintOrder } from '../src/types/index.js';
 
 function makeOrder(overrides: Partial<PrintOrder['order']> = {}): PrintOrder {
@@ -121,5 +121,30 @@ describe('renderThermalSlipHtml', () => {
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('&lt;b&gt;Hi&lt;/b&gt;');
+  });
+});
+
+describe('renderLabelPlaceholderHtml', () => {
+  it('renders sequence, order code and label plan text', () => {
+    const html = renderLabelPlaceholderHtml({
+      ...makeOrder(),
+      labelPlan: { capability: 'sf_native', displayText: '順豐 10×15' },
+    });
+    expect(html).toContain('#001 / 003');
+    expect(html).toContain('2605301537Q1M5QR');
+    expect(html).toContain('順豐 10×15');
+    expect(html).toContain('物流單（待整合）');
+    expect(html).toContain('此頁為佔位');
+  });
+
+  it('escapes HTML in order code and label display text', () => {
+    const html = renderLabelPlaceholderHtml({
+      ...makeOrder({ orderCode: '<img src=x onerror=alert(1)>' }),
+      labelPlan: { capability: 'sf_native', displayText: '<b>順豐</b>' },
+    });
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<b>順豐</b>');
+    expect(html).toContain('&lt;b&gt;順豐&lt;/b&gt;');
   });
 });
