@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchOrdersViaContentScript } from '../src/popup/fetchViaContent.js';
+import { fetchOrdersViaContentScript, findBvshopTab } from '../src/popup/fetchViaContent.js';
 
 function stubChromeTabs() {
   const query = vi.fn();
@@ -39,7 +39,7 @@ describe('fetchOrdersViaContentScript', () => {
     const data = [{ id: 1726850, order_form_code: 'BV001' }];
 
     query.mockResolvedValue([
-      { id: 1, url: 'https://bvshop-manage.bvshop.tw/dashboard', active: true },
+      { id: 1, url: 'https://bvshop-manage.bv-shop.tw/dashboard', active: true },
       { id: 2, url: 'https://bvshop-manage.bvshop.tw/order?page=2', active: false },
     ]);
     sendMessage.mockResolvedValue({ ok: true, data });
@@ -51,10 +51,21 @@ describe('fetchOrdersViaContentScript', () => {
     });
   });
 
+  it('findBvshopTab supports both hosts and prefers active order tab', async () => {
+    const { query } = stubChromeTabs();
+    query.mockResolvedValue([
+      { id: 10, url: 'https://bvshop-manage.bv-shop.tw/order?page=1', active: false },
+      { id: 11, url: 'https://bvshop-manage.bvshop.tw/order?page=2', active: true },
+      { id: 12, url: 'https://example.com/', active: true },
+    ]);
+
+    await expect(findBvshopTab()).resolves.toMatchObject({ id: 11 });
+  });
+
   it('returns content-script error responses', async () => {
     const { query, sendMessage } = stubChromeTabs();
     query.mockResolvedValue([
-      { id: 3, url: 'https://bvshop-manage.bvshop.tw/order', active: true },
+      { id: 3, url: 'https://bvshop-manage.bv-shop.tw/order', active: true },
     ]);
     sendMessage.mockResolvedValue({ ok: false, error: '讀取失敗' });
 

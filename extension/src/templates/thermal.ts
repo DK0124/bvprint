@@ -161,6 +161,7 @@ export function renderThermalSlipHtml(po: PrintOrder): string {
   ${receiverHtml}
   <section class="meta">
     <div>物流：${esc(order.logisticMethod)}</div>
+    <div>物流單：${esc(po.labelPlan.displayText)}</div>
     <div>付款：${esc(order.paymentMethod)} / ${esc(payStatusLabel)}</div>
     <div>出貨狀態：${esc(logStatusLabel)}</div>
   </section>

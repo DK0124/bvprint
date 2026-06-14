@@ -78,6 +78,15 @@ export type LogisticProvider = 'ecpay' | 'payuni' | 'tcat' | 'sf' | 'unknown';
 
 export type PaperSize = 'THERMAL_100X150' | 'A4' | 'A5' | 'ROLL_80MM';
 export type PrintMode = 'PAIR' | 'LABELS_FIRST' | 'SLIPS_FIRST';
+export type LabelCapability = 'sf_native' | 'none';
+
+export interface LabelPlan {
+  /** capability='sf_native' 時，BVSHOP 同源檢視 URL（含 origin 與 ?ids=） */
+  bvshopViewUrl?: string;
+  /** 顯示文字，例如「順豐 10×15」或「無物流單」 */
+  displayText: string;
+  capability: LabelCapability;
+}
 
 export interface PrintOrderItem {
   title: string;
@@ -115,6 +124,7 @@ export interface PrintOrder {
   printSeqText: string;
   order: PrintOrderData;
   provider: LogisticProvider;
+  labelPlan: LabelPlan;
 }
 
 export interface PrintSettings {
