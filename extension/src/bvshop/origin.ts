@@ -4,7 +4,13 @@ export const BVSHOP_HOSTS = [
 ] as const;
 
 export function isBvshopUrl(url?: string): boolean {
-  return !!url && BVSHOP_HOSTS.some((h) => url.includes(h));
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return BVSHOP_HOSTS.some((h) => parsed.host === h);
+  } catch {
+    return false;
+  }
 }
 
 /** 從完整 url 取 origin（含 protocol+host），失敗回 undefined */

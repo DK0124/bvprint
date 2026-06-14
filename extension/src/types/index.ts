@@ -81,11 +81,11 @@ export type PrintMode = 'PAIR' | 'LABELS_FIRST' | 'SLIPS_FIRST';
 export type LabelCapability = 'sf_native' | 'none';
 
 export interface LabelPlan {
+  capability: LabelCapability;
   /** capability='sf_native' 時，BVSHOP 同源檢視 URL（含 origin 與 ?ids=） */
   bvshopViewUrl?: string;
   /** 顯示文字，例如「順豐 10×15」或「無物流單」 */
   displayText: string;
-  capability: LabelCapability;
 }
 
 export interface PrintOrderItem {
