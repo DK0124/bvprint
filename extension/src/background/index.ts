@@ -19,13 +19,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'OPEN_PRINT_VIEW') {
     const request: PrintRequestMessage = {
       type: 'PRINT_REQUEST',
-      orders: ((message as { orders?: PrintOrder[] }).orders ?? []),
-      settings: ((message as { settings?: PrintSettings }).settings ?? {
+      orders: (message as { orders?: PrintOrder[] }).orders ?? [],
+      settings: (message as { settings?: PrintSettings }).settings ?? {
         senderName: '',
         senderPhone: '',
         paperSize: 'THERMAL_100X150',
         mode: 'PAIR',
-      }),
+      },
     };
 
     sendResponse({ ok: true });

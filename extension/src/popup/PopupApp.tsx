@@ -40,6 +40,12 @@ const STORAGE_KEY_SETTINGS = 'bvshop_print_settings';
 const STORAGE_KEY_PRINT_REQUEST = 'bvshop_print_request';
 const DEBUG_DEFAULT_SF_ORDER_ID = '10541';
 
+interface ProbeSfLabelResponse {
+  ok?: boolean;
+  error?: string;
+  data?: unknown;
+}
+
 const DEFAULT_SETTINGS: PrintSettings = {
   senderName: '',
   senderPhone: '',
@@ -271,7 +277,8 @@ export function PopupApp() {
     await chrome.storage.local.set({ [STORAGE_KEY_PRINT_REQUEST]: request });
 
     // MV3 popup 會在新分頁變成 active 後立即關閉；此處使用 fire-and-forget 避免等待回應造成中斷。
-    void chrome.runtime.sendMessage({ ...request, type: 'OPEN_PRINT_VIEW' }).catch(() => {
+    void chrome.runtime.sendMessage({ ...request, type: 'OPEN_PRINT_VIEW' }).catch((error) => {
+      console.warn('[BVSHOP Print] OPEN_PRINT_VIEW failed, using popup fallback:', error);
       // 保底：若 background 訊息流程失敗，改由 popup 直接開列印頁，確保按下後一定能開分頁。
       void openPrintViewFallback();
     });
@@ -302,9 +309,8 @@ export function PopupApp() {
     const orderId = (probeOrderIdInput.trim() || fallbackOrderId);
 
     try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'PROBE_SF_LABEL', orderId }) as
-        | { ok?: boolean; error?: string; data?: unknown }
-        | undefined;
+      const rawResponse = await chrome.tabs.sendMessage(tab.id, { type: 'PROBE_SF_LABEL', orderId });
+      const response = isProbeSfLabelResponse(rawResponse) ? rawResponse : undefined;
 
       if (!response || response.ok === false) {
         setNotice({
@@ -602,4 +608,14 @@ function normalizeIds(value: unknown): string[] {
         .filter(Boolean)
     )
   );
+}
+
+function isProbeSfLabelResponse(value: unknown): value is ProbeSfLabelResponse {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  const hasOk = !('ok' in candidate) || typeof candidate.ok === 'boolean';
+  const hasError = !('error' in candidate) || typeof candidate.error === 'string';
+  const hasData = !('data' in candidate) || candidate.data !== undefined;
+  const hasAnyExpectedKey = ('ok' in candidate) || ('error' in candidate) || ('data' in candidate);
+  return hasAnyExpectedKey && hasOk && hasError && hasData;
 }

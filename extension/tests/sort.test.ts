@@ -89,11 +89,11 @@ describe('arrangePrintPages', () => {
     expect(pages[4]).toMatchObject({ kind: 'label', order: mixedOrders[2] });
   });
 
-  it.each<['PAIR' | 'LABELS_FIRST' | 'SLIPS_FIRST']>([
+  it.each([
     ['PAIR'],
     ['LABELS_FIRST'],
     ['SLIPS_FIRST'],
-  ])('never emits label page for capability=none in %s mode', (mode) => {
+  ] as const)('never emits label page for capability=none in %s mode', (mode) => {
     const pages = arrangePrintPages(mixedOrders, mode);
     const hasNoneLabel = pages.some((page) => page.kind === 'label' && page.order.labelPlan.capability === 'none');
     expect(hasNoneLabel).toBe(false);
