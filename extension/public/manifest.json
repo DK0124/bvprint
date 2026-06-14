@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "BVSHOP 出貨列印助手",
+  "version": "1.0.0",
+  "description": "在 BVSHOP 後台訂單頁勾選訂單後，一鍵產生熱感出貨明細列印（100×150mm）。無需 API Token，靠既有登入 cookie 運作。",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["https://bvshop-manage.bvshop.tw/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://bvshop-manage.bvshop.tw/order*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/index.html",
+    "default_title": "BVSHOP 出貨列印助手",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["print/index.html", "assets/*"],
+      "matches": ["https://bvshop-manage.bvshop.tw/*"]
+    }
+  ]
+}
