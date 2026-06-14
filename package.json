@@ -1,0 +1,28 @@
+{
+  "name": "bvshop-print-assistant",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:server dev:web",
+    "dev:server": "npm run dev -w apps/server",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -w packages/bvshop-api && npm run build -w packages/print-core && npm run build -w packages/templates && npm run build -w apps/server && npm run build -w apps/web",
+    "lint": "npm run lint -w packages/bvshop-api && npm run lint -w packages/print-core && npm run lint -w packages/templates && npm run lint -w apps/server && npm run lint -w apps/web",
+    "test": "npm run test -w packages/print-core && npm run test -w packages/templates"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@typescript-eslint/eslint-plugin": "^8.35.1",
+    "@typescript-eslint/parser": "^8.35.1",
+    "eslint": "^9.29.0",
+    "eslint-config-prettier": "^10.1.5",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.6.0",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
+  }
+}
