@@ -8,8 +8,7 @@
 
 import type { PrintRequestMessage } from '../types/index.js';
 
-// Storage key (同 content script)
-const STORAGE_KEY = 'bvshop_print_checked_orders';
+const STORAGE_KEYS = ['bvshop_selected_ids', 'bvshop_print_checked_orders'];
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[BVSHOP Print] Extension installed / updated');
@@ -25,7 +24,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === 'CLEAR_ORDERS') {
-    chrome.storage.local.remove(STORAGE_KEY, () => sendResponse({ ok: true }));
+    chrome.storage.local.remove(STORAGE_KEYS, () => sendResponse({ ok: true }));
     return true;
   }
 });

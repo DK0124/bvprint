@@ -241,3 +241,15 @@ select:focus {
   color: #f57c00;
   margin-left: 3px;
 }
+
+.tracking-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: #b71c1c;
+  font-weight: 700;
+}
+
+.tracking-warning-list {
+  margin-top: 8px;
+}
