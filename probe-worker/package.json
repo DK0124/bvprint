@@ -1,0 +1,15 @@
+{
+  "name": "bvprint-probe-worker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "⚠️ 調查用 Cloudflare Worker（一次性可行性探測，用完即刪）",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^3.99.0"
+  }
+}
