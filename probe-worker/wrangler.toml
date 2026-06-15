@@ -1,0 +1,6 @@
+# ⚠️ 調查用 Worker，驗證完成後請執行 `wrangler delete` 移除，切勿長期部署。
+# 請勿在此檔案加入任何密鑰或憑證。
+
+name = "bvprint-probe"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
