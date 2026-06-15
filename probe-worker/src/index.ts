@@ -71,6 +71,10 @@ interface ProbeResult {
 // CORS helpers
 // ────────────────────────────────────────────────────────────────────
 
+/** 模擬瀏覽器 UA，盡量讓 PayUni / 7-11 伺服器接受請求 */
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 const CORS_HEADERS: HeadersInit = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -234,7 +238,7 @@ async function handleProbePayuni(request: Request): Promise<Response> {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_UA,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8",
         "Referer": "https://bvshop-manage.bvshop.tw/",
@@ -321,7 +325,7 @@ async function handleProbePayuni(request: Request): Promise<Response> {
         const imgResp = await fetch(absoluteUrl, {
           headers: {
             "Referer": finalUrl,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": BROWSER_UA,
           },
         });
         imgResult.status = imgResp.status;
